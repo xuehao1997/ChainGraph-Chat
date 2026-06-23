@@ -1,0 +1,16 @@
+{
+  "name": "streambench",
+  "private": true,
+  "version": "0.0.1",
+  "description": "全栈 SSE 测试台：Express 接 DeepSeek，React 前端分别用原生 EventSource 与 @microsoft/fetch-event-source 实现流式问答",
+  "scripts": {
+    "dev": "concurrently -n server,client -c green,cyan \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "install:all": "npm install && npm --prefix server install && npm --prefix client install",
+    "build": "npm --prefix client run build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
