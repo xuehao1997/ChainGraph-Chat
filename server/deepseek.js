@@ -1,8 +1,25 @@
+import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { ChatOpenAI } from '@langchain/openai';
 import {
   DEEPSEEK_API_KEY,
   DEEPSEEK_BASE_URL,
   DEEPSEEK_MODEL,
 } from './config.js';
+
+const SYSTEM_PROMPT =
+  '你是一个简洁、友好的中文 AI 助手，用于 SSE 流式输出测试。';
+
+function createDeepSeekChatModel() {
+  return new ChatOpenAI({
+    apiKey: DEEPSEEK_API_KEY,
+    model: DEEPSEEK_MODEL,
+    configuration: {
+      baseURL: DEEPSEEK_BASE_URL,
+    },
+    // DeepSeek 兼容 OpenAI Chat Completions，但不需要 LangChain 额外请求流式 usage。
+    streamUsage: false,
+  });
+}
 
 /**
  * 调用 DeepSeek 流式接口，并把每个 token 的增量内容以标准 SSE 帧转发给前端。
@@ -21,76 +38,43 @@ import {
  * @param {AbortSignal} params.signal  客户端断开时用于中断上游请求
  */
 export async function streamDeepSeekToSSE({ message, res, signal }) {
-  let upstream;
   try {
-    upstream = await fetch(`${DEEPSEEK_BASE_URL}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: DEEPSEEK_MODEL,
-        stream: true,
-        messages: [
-          {
-            role: 'system',
-            content: '你是一个简洁、友好的中文 AI 助手，用于 SSE 流式输出测试。',
-          },
-          { role: 'user', content: message },
-        ],
-      }),
-      signal,
-    });
-  } catch (err) {
-    if (signal?.aborted) return; // 客户端主动断开，无需回写
-    writeError(res, `请求 DeepSeek 失败: ${err.message}`);
-    return endStream(res);
-  }
+    const model = createDeepSeekChatModel();
+    const stream = await model.stream(
+      [new SystemMessage(SYSTEM_PROMPT), new HumanMessage(message)],
+      { signal },
+    );
 
-  if (!upstream.ok || !upstream.body) {
-    const detail = await safeReadText(upstream);
-    writeError(res, `DeepSeek 返回错误 ${upstream.status}`, detail);
-    return endStream(res);
-  }
-
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  try {
-    for await (const chunk of upstream.body) {
+    for await (const chunk of stream) {
       if (signal?.aborted) break;
-      buffer += decoder.decode(chunk, { stream: true });
 
-      // 上游也是 SSE，按行解析，残行留到下一轮拼接
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? '';
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith('data:')) continue;
-
-        const data = trimmed.slice(5).trim();
-        if (data === '[DONE]') continue;
-
-        try {
-          const json = JSON.parse(data);
-          const content = json?.choices?.[0]?.delta?.content;
-          if (content) {
-            res.write(`data: ${JSON.stringify({ content })}\n\n`);
-          }
-        } catch {
-          // 单帧解析失败忽略，避免中断整条流
-        }
+      const content = normalizeChunkContent(chunk.content);
+      if (content) {
+        res.write(`data: ${JSON.stringify({ content })}\n\n`);
       }
     }
   } catch (err) {
     if (!signal?.aborted) {
-      writeError(res, `读取 DeepSeek 流出错: ${err.message}`);
+      writeError(res, `LangChain 调用 DeepSeek 流出错: ${err.message}`);
     }
   }
 
   endStream(res);
+}
+
+function normalizeChunkContent(content) {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+
+  return content
+    .map((part) => {
+      if (typeof part === 'string') return part;
+      if (part?.type === 'text' || part?.type === 'text_delta') {
+        return part.text ?? '';
+      }
+      return '';
+    })
+    .join('');
 }
 
 function writeError(res, message, detail) {
@@ -105,13 +89,5 @@ function endStream(res) {
     res.end();
   } catch {
     // 连接已关闭
-  }
-}
-
-async function safeReadText(response) {
-  try {
-    return await response.text();
-  } catch {
-    return '';
   }
 }

@@ -9,6 +9,8 @@
     "start": "node --env-file-if-exists=.env index.js"
   },
   "dependencies": {
+    "@langchain/core": "^1.2.1",
+    "@langchain/openai": "^1.5.3",
     "cors": "^2.8.5",
     "express": "^4.21.2"
   }
