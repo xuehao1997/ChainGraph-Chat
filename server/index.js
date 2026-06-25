@@ -27,6 +27,7 @@ app.get('/api/chat/eventsource', (req, res) => {
     res.status(400).json({ error: 'message 不能为空' });
     return;
   }
+  const history = parseHistoryQuery(req.query.history);
 
   prepareSSE(res);
 
@@ -34,7 +35,7 @@ app.get('/api/chat/eventsource', (req, res) => {
   const controller = new AbortController();
   res.on('close', () => controller.abort());
 
-  streamDeepSeekToSSE({ message, res, signal: controller.signal });
+  streamDeepSeekToSSE({ message, history, res, signal: controller.signal });
 });
 
 /**
@@ -48,6 +49,7 @@ app.post('/api/chat/fetch', (req, res) => {
     res.status(400).json({ error: 'message 不能为空' });
     return;
   }
+  const history = normalizeHistory(req.body?.history);
 
   prepareSSE(res);
 
@@ -55,7 +57,7 @@ app.post('/api/chat/fetch', (req, res) => {
   const controller = new AbortController();
   res.on('close', () => controller.abort());
 
-  streamDeepSeekToSSE({ message, res, signal: controller.signal });
+  streamDeepSeekToSSE({ message, history, res, signal: controller.signal });
 });
 
 app.get('/api/health', (_req, res) => {
@@ -65,3 +67,28 @@ app.get('/api/health', (_req, res) => {
 app.listen(PORT, () => {
   console.log(`[StreamBench] server listening on http://localhost:${PORT}`);
 });
+
+function parseHistoryQuery(value) {
+  if (typeof value !== 'string') return [];
+
+  try {
+    return normalizeHistory(JSON.parse(value));
+  } catch {
+    return [];
+  }
+}
+
+function normalizeHistory(value) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => ({
+      role: item?.role,
+      content: String(item?.content ?? '').trim(),
+    }))
+    .filter(
+      (item) =>
+        (item.role === 'user' || item.role === 'assistant') && item.content,
+    )
+    .slice(-10);
+}

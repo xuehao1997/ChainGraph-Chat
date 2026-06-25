@@ -1,4 +1,8 @@
-import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import {
+  AIMessage,
+  HumanMessage,
+  SystemMessage,
+} from '@langchain/core/messages';
 import { ChatOpenAI } from '@langchain/openai';
 import {
   DEEPSEEK_API_KEY,
@@ -34,14 +38,20 @@ function createDeepSeekChatModel() {
  *
  * @param {object} params
  * @param {string} params.message     用户输入
+ * @param {{ role: 'user' | 'assistant', content: string }[]} [params.history] 历史对话
  * @param {import('express').Response} params.res  Express 响应（已设置 SSE 头）
  * @param {AbortSignal} params.signal  客户端断开时用于中断上游请求
  */
-export async function streamDeepSeekToSSE({ message, res, signal }) {
+export async function streamDeepSeekToSSE({ message, history = [], res, signal }) {
   try {
     const model = createDeepSeekChatModel();
+    const messages = [
+      new SystemMessage(SYSTEM_PROMPT),
+      ...toLangChainMessages(history),
+      new HumanMessage(message),
+    ];
     const stream = await model.stream(
-      [new SystemMessage(SYSTEM_PROMPT), new HumanMessage(message)],
+      messages,
       { signal },
     );
 
@@ -60,6 +70,14 @@ export async function streamDeepSeekToSSE({ message, res, signal }) {
   }
 
   endStream(res);
+}
+
+function toLangChainMessages(history) {
+  return history.map((item) =>
+    item.role === 'assistant'
+      ? new AIMessage(item.content)
+      : new HumanMessage(item.content),
+  );
 }
 
 function normalizeChunkContent(content) {

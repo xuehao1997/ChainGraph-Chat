@@ -26,6 +26,11 @@ export interface StreamController {
   abort: () => void;
 }
 
+export interface ChatHistoryMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 export interface ChatViewProps {
   title: string;
   subtitle: string;
@@ -33,6 +38,7 @@ export interface ChatViewProps {
   /** 发起一次流式请求；ChatView 负责 UI，具体传输由各页面注入 */
   start: (params: {
     message: string;
+    history: ChatHistoryMessage[];
     emitIntervalMs: number;
     handlers: StreamHandlers;
   }) => StreamController;
@@ -54,6 +60,8 @@ const STATUS_TEXT: Record<StreamStatus, string> = {
   done: '已完成',
   error: '出错',
 };
+
+const MAX_HISTORY_MESSAGES = 10;
 
 export default function ChatView({
   title,
@@ -116,6 +124,11 @@ export default function ChatView({
     const message = input.trim();
     if (!message || isBusy) return;
 
+    const history = messages
+      .filter((m) => !m.streaming && !m.error && m.content.trim())
+      .map(({ role, content }) => ({ role, content }))
+      .slice(-MAX_HISTORY_MESSAGES);
+
     setInput('');
     setStatus('connecting');
     startTimeRef.current = Date.now();
@@ -128,6 +141,7 @@ export default function ChatView({
 
     controllerRef.current = start({
       message,
+      history,
       emitIntervalMs,
       handlers: {
         onOpen: () => setStatus('streaming'),
@@ -147,7 +161,15 @@ export default function ChatView({
         },
       },
     });
-  }, [appendDelta, emitIntervalMs, finishLast, input, isBusy, start]);
+  }, [
+    appendDelta,
+    emitIntervalMs,
+    finishLast,
+    input,
+    isBusy,
+    messages,
+    start,
+  ]);
 
   const handleStop = useCallback(() => {
     controllerRef.current?.abort();
@@ -273,7 +295,9 @@ export default function ChatView({
             </button>
           )}
         </div>
-        <div className='hint'>本页不保存历史记录，仅用于基础 SSE 测试</div>
+        <div className='hint'>
+          本页会携带最近 {MAX_HISTORY_MESSAGES} 条上下文作为简单模型记忆
+        </div>
       </div>
     </div>
   );

@@ -10,10 +10,14 @@ import { MessageThrottler } from '@/lib/MessageThrottler';
 export default function FetchEventSourcePage() {
   const start = ({
     message,
+    history,
     emitIntervalMs,
     handlers,
   }: {
     message: string;
+    history: Parameters<
+      React.ComponentProps<typeof ChatView>['start']
+    >[0]['history'];
     emitIntervalMs: number;
     handlers: Parameters<
       React.ComponentProps<typeof ChatView>['start']
@@ -37,7 +41,7 @@ export default function FetchEventSourcePage() {
     fetchEventSource('/api/chat/fetch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ message, history }),
       signal: ctrl.signal,
       openWhenHidden: true, // 切到后台标签页时也保持连接
       onopen: async (res) => {
