@@ -43,6 +43,8 @@ function createDeepSeekChatModel() {
  * @param {AbortSignal} params.signal  客户端断开时用于中断上游请求
  */
 export async function streamDeepSeekToSSE({ message, history = [], res, signal }) {
+  let assistantContent = '';
+
   try {
     const model = createDeepSeekChatModel();
     const messages = [
@@ -60,6 +62,7 @@ export async function streamDeepSeekToSSE({ message, history = [], res, signal }
 
       const content = normalizeChunkContent(chunk.content);
       if (content) {
+        assistantContent += content;
         res.write(`data: ${JSON.stringify({ content })}\n\n`);
       }
     }
@@ -70,6 +73,7 @@ export async function streamDeepSeekToSSE({ message, history = [], res, signal }
   }
 
   endStream(res);
+  return assistantContent;
 }
 
 function toLangChainMessages(history) {

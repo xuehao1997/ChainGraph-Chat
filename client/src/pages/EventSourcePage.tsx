@@ -9,14 +9,14 @@ import { SSEClient } from '@/lib/SSEClient';
 export default function EventSourcePage() {
   const start = ({
     message,
-    history,
+    sessionId,
     emitIntervalMs,
     handlers,
   }: {
     message: string;
-    history: Parameters<
+    sessionId: Parameters<
       React.ComponentProps<typeof ChatView>['start']
-    >[0]['history'];
+    >[0]['sessionId'];
     emitIntervalMs: number;
     handlers: Parameters<
       React.ComponentProps<typeof ChatView>['start']
@@ -24,7 +24,7 @@ export default function EventSourcePage() {
   }): StreamController => {
     const params = new URLSearchParams({
       message,
-      history: JSON.stringify(history),
+      sessionId,
     });
     const url = `/api/chat/eventsource?${params.toString()}`;
     let done = false;

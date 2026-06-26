@@ -26,11 +26,6 @@ export interface StreamController {
   abort: () => void;
 }
 
-export interface ChatHistoryMessage {
-  role: 'user' | 'assistant';
-  content: string;
-}
-
 export interface ChatViewProps {
   title: string;
   subtitle: string;
@@ -38,7 +33,7 @@ export interface ChatViewProps {
   /** 发起一次流式请求；ChatView 负责 UI，具体传输由各页面注入 */
   start: (params: {
     message: string;
-    history: ChatHistoryMessage[];
+    sessionId: string;
     emitIntervalMs: number;
     handlers: StreamHandlers;
   }) => StreamController;
@@ -61,7 +56,9 @@ const STATUS_TEXT: Record<StreamStatus, string> = {
   error: '出错',
 };
 
-const MAX_HISTORY_MESSAGES = 10;
+function createSessionId() {
+  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+}
 
 export default function ChatView({
   title,
@@ -73,6 +70,7 @@ export default function ChatView({
   const [input, setInput] = useState('');
   const [status, setStatus] = useState<StreamStatus>('idle');
   const [emitIntervalMs, setEmitIntervalMs] = useState(80);
+  const [sessionId, setSessionId] = useState(createSessionId);
 
   const controllerRef = useRef<StreamController | null>(null);
   const startTimeRef = useRef(0);
@@ -124,11 +122,6 @@ export default function ChatView({
     const message = input.trim();
     if (!message || isBusy) return;
 
-    const history = messages
-      .filter((m) => !m.streaming && !m.error && m.content.trim())
-      .map(({ role, content }) => ({ role, content }))
-      .slice(-MAX_HISTORY_MESSAGES);
-
     setInput('');
     setStatus('connecting');
     startTimeRef.current = Date.now();
@@ -141,7 +134,7 @@ export default function ChatView({
 
     controllerRef.current = start({
       message,
-      history,
+      sessionId,
       emitIntervalMs,
       handlers: {
         onOpen: () => setStatus('streaming'),
@@ -167,7 +160,7 @@ export default function ChatView({
     finishLast,
     input,
     isBusy,
-    messages,
+    sessionId,
     start,
   ]);
 
@@ -223,11 +216,12 @@ export default function ChatView({
             }}
             onClick={() => {
               setMessages([]);
+              setSessionId(createSessionId());
               setStatus('idle');
             }}
             disabled={isBusy}
           >
-            清空
+            新会话
           </button>
         </div>
       </header>
@@ -296,7 +290,7 @@ export default function ChatView({
           )}
         </div>
         <div className='hint'>
-          本页会携带最近 {MAX_HISTORY_MESSAGES} 条上下文作为简单模型记忆
+          当前会话 ID：{sessionId}，历史消息由后端内存保存
         </div>
       </div>
     </div>
