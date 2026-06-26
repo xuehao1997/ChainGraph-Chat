@@ -5,6 +5,7 @@ import {
   useState,
   type KeyboardEvent,
 } from 'react';
+import { Input, InputNumber, Select } from 'antd';
 
 export type StreamStatus =
   | 'idle'
@@ -213,56 +214,51 @@ export default function ChatView({
         <div className='chat-toolbar'>
           <label className='toolbar-field'>
             角色/模式
-            <select
+            <Select
               value={promptMode}
-              onChange={(e) => {
-                setPromptMode(e.target.value);
+              options={PROMPT_MODES}
+              style={{ width: 120 }}
+              onChange={(value) => {
+                setPromptMode(value);
                 setMessages([]);
                 setSessionId(createSessionId());
                 setStatus('idle');
               }}
               disabled={isBusy}
-            >
-              {PROMPT_MODES.map((mode) => (
-                <option key={mode.value} value={mode.value}>
-                  {mode.label}
-                </option>
-              ))}
-            </select>
+            />
           </label>
           <label className='toolbar-field'>
             用户名
-            <input
-              type='text'
+            <Input
               value={userName}
               placeholder='可选'
               onChange={(e) => setUserName(e.target.value)}
               disabled={isBusy}
+              style={{ width: 96 }}
             />
           </label>
           <label className='toolbar-field'>
             目标语言
-            <select
+            <Select
               value={language}
-              onChange={(e) => setLanguage(e.target.value)}
+              options={LANGUAGE_OPTIONS.map((option) => ({
+                value: option,
+                label: option,
+              }))}
+              style={{ width: 110 }}
+              onChange={setLanguage}
               disabled={isBusy}
-            >
-              {LANGUAGE_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
+            />
           </label>
           <label className='toolbar-field'>
             节流间隔 emitIntervalMs(ms)
-            <input
-              type='number'
+            <InputNumber
               min={0}
               max={1000}
               step={20}
               value={emitIntervalMs}
-              onChange={(e) => setEmitIntervalMs(Number(e.target.value) || 0)}
+              onChange={(value) => setEmitIntervalMs(value ?? 0)}
+              style={{ width: 80 }}
             />
           </label>
           <span className='toolbar-field'>
@@ -330,13 +326,14 @@ export default function ChatView({
 
       <div className='composer'>
         <div className='composer-inner'>
-          <textarea
+          <Input.TextArea
             rows={1}
             placeholder='给 DeepSeek 发消息…（Enter 发送，Shift+Enter 换行）'
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={isBusy}
+            autoSize={{ minRows: 1, maxRows: 6 }}
           />
           {isBusy ? (
             <button className='btn btn-stop' onClick={handleStop}>
