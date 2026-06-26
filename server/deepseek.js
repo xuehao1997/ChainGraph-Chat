@@ -14,6 +14,7 @@ import {
   createChatPrompt,
   isStructuredAnalysisMode,
 } from './prompts.js';
+import { chatTools } from './tools.js';
 
 function createDeepSeekChatModel() {
   return new ChatOpenAI({
@@ -59,17 +60,31 @@ const streamToSSERunnable = RunnableLambda.from(
         return assistantContent;
       }
 
-      const stream = await chain.stream(input, { signal });
+      const promptValue = await createChatPrompt(promptMode).invoke(input);
+      const messages = promptValue.toChatMessages();
+      const modelWithTools = model.bindTools(chatTools);
+      const firstResponse = await modelWithTools.invoke(messages, { signal });
+      const toolCalls = firstResponse.tool_calls ?? [];
 
-      for await (const chunk of stream) {
-        if (signal?.aborted) break;
+      if (toolCalls.length > 0) {
+        const toolMessages = await Promise.all(
+          toolCalls.map((toolCall) => runToolCall(toolCall)),
+        );
 
-        const content = normalizeChunkContent(chunk.content);
-        if (content) {
-          assistantContent += content;
-          res.write(`data: ${JSON.stringify({ content })}\n\n`);
-        }
+        const stream = await model.stream(
+          [...messages, firstResponse, ...toolMessages],
+          { signal },
+        );
+
+        assistantContent = await writeStreamToSSE(stream, res, signal);
+        return assistantContent;
       }
+
+      assistantContent = normalizeChunkContent(firstResponse.content);
+      if (assistantContent) {
+        res.write(`data: ${JSON.stringify({ content: assistantContent })}\n\n`);
+      }
+      return assistantContent;
     } catch (err) {
       if (!signal?.aborted) {
         writeError(res, `LangChain 调用 DeepSeek 流出错: ${err.message}`);
@@ -78,14 +93,34 @@ const streamToSSERunnable = RunnableLambda.from(
     } finally {
       endStream(res);
     }
-
-    if (!assistantContent.trim()) {
-      throw new Error('DeepSeek 未返回有效内容');
-    }
-
-    return assistantContent;
   },
 );
+
+async function runToolCall(toolCall) {
+  const matchedTool = chatTools.find((item) => item.name === toolCall.name);
+  if (!matchedTool) {
+    throw new Error(`未知工具: ${toolCall.name}`);
+  }
+
+  return matchedTool.invoke(toolCall);
+}
+
+async function writeStreamToSSE(stream, res, signal) {
+  let content = '';
+
+  for await (const chunk of stream) {
+    if (signal?.aborted) break;
+
+    const delta = normalizeChunkContent(chunk.content);
+    if (delta) {
+      content += delta;
+      res.write(`data: ${JSON.stringify({ content: delta })}\n\n`);
+    }
+  }
+
+  return content;
+}
+
 
 const streamToSSEWithHistory = new RunnableWithMessageHistory({
   runnable: streamToSSERunnable,
