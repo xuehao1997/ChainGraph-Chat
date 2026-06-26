@@ -9,7 +9,11 @@ import {
   DEEPSEEK_MODEL,
 } from './config.js';
 import { getMessageHistory } from './memory.js';
-import { createChatPrompt } from './prompts.js';
+import {
+  analysisOutputParser,
+  createChatPrompt,
+  isStructuredAnalysisMode,
+} from './prompts.js';
 
 function createDeepSeekChatModel() {
   return new ChatOpenAI({
@@ -38,15 +42,24 @@ const streamToSSERunnable = RunnableLambda.from(
     try {
       const model = createDeepSeekChatModel();
       const chain = createChatPrompt(promptMode).pipe(model);
-      const stream = await chain.stream(
-        {
-          message,
-          history,
-          user_name: userName || '',
-          language: language || 'English',
-        },
-        { signal },
-      );
+      const input = {
+        message,
+        history,
+        user_name: userName || '',
+        language: language || 'English',
+        format_instructions: analysisOutputParser.getFormatInstructions(),
+      };
+
+      if (isStructuredAnalysisMode(promptMode)) {
+        const result = await chain.invoke(input, { signal });
+        const rawContent = normalizeChunkContent(result.content);
+        const parsed = await analysisOutputParser.parse(rawContent);
+        assistantContent = JSON.stringify(parsed, null, 2);
+        res.write(`data: ${JSON.stringify({ content: assistantContent })}\n\n`);
+        return assistantContent;
+      }
+
+      const stream = await chain.stream(input, { signal });
 
       for await (const chunk of stream) {
         if (signal?.aborted) break;

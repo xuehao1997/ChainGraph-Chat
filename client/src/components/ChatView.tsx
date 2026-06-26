@@ -64,6 +64,7 @@ const PROMPT_MODES = [
   { value: 'assistant', label: '简洁助手' },
   { value: 'code_review', label: '代码审查' },
   { value: 'translator', label: '翻译官' },
+  { value: 'structured_analysis', label: '结构化分析' },
 ];
 
 const LANGUAGE_OPTIONS = ['Chinese', 'English'];
