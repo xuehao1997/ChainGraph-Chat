@@ -1,14 +1,18 @@
 import {
-  AIMessage,
   HumanMessage,
   SystemMessage,
 } from '@langchain/core/messages';
+import {
+  RunnableLambda,
+  RunnableWithMessageHistory,
+} from '@langchain/core/runnables';
 import { ChatOpenAI } from '@langchain/openai';
 import {
   DEEPSEEK_API_KEY,
   DEEPSEEK_BASE_URL,
   DEEPSEEK_MODEL,
 } from './config.js';
+import { getMessageHistory } from './memory.js';
 
 const SYSTEM_PROMPT =
   '你是一个简洁、友好的中文 AI 助手，用于 SSE 流式输出测试。';
@@ -25,6 +29,55 @@ function createDeepSeekChatModel() {
   });
 }
 
+const streamToSSERunnable = RunnableLambda.from(
+  async ({ message, history = [], res, signal }) => {
+    let assistantContent = '';
+
+    try {
+      const model = createDeepSeekChatModel();
+      const messages = [
+        new SystemMessage(SYSTEM_PROMPT),
+        ...history,
+        new HumanMessage(message),
+      ];
+      const stream = await model.stream(
+        messages,
+        { signal },
+      );
+
+      for await (const chunk of stream) {
+        if (signal?.aborted) break;
+
+        const content = normalizeChunkContent(chunk.content);
+        if (content) {
+          assistantContent += content;
+          res.write(`data: ${JSON.stringify({ content })}\n\n`);
+        }
+      }
+    } catch (err) {
+      if (!signal?.aborted) {
+        writeError(res, `LangChain 调用 DeepSeek 流出错: ${err.message}`);
+      }
+      throw err;
+    } finally {
+      endStream(res);
+    }
+
+    if (!assistantContent.trim()) {
+      throw new Error('DeepSeek 未返回有效内容');
+    }
+
+    return assistantContent;
+  },
+);
+
+const streamToSSEWithHistory = new RunnableWithMessageHistory({
+  runnable: streamToSSERunnable,
+  getMessageHistory,
+  inputMessagesKey: 'message',
+  historyMessagesKey: 'history',
+});
+
 /**
  * 调用 DeepSeek 流式接口，并把每个 token 的增量内容以标准 SSE 帧转发给前端。
  *
@@ -38,50 +91,19 @@ function createDeepSeekChatModel() {
  *
  * @param {object} params
  * @param {string} params.message     用户输入
- * @param {{ role: 'user' | 'assistant', content: string }[]} [params.history] 历史对话
+ * @param {string} params.sessionId   会话 ID，用于读写 ChatMessageHistory
  * @param {import('express').Response} params.res  Express 响应（已设置 SSE 头）
  * @param {AbortSignal} params.signal  客户端断开时用于中断上游请求
  */
-export async function streamDeepSeekToSSE({ message, history = [], res, signal }) {
-  let assistantContent = '';
-
+export async function streamDeepSeekToSSE({ message, sessionId, res, signal }) {
   try {
-    const model = createDeepSeekChatModel();
-    const messages = [
-      new SystemMessage(SYSTEM_PROMPT),
-      ...toLangChainMessages(history),
-      new HumanMessage(message),
-    ];
-    const stream = await model.stream(
-      messages,
-      { signal },
+    await streamToSSEWithHistory.invoke(
+      { message, res, signal },
+      { configurable: { sessionId } },
     );
-
-    for await (const chunk of stream) {
-      if (signal?.aborted) break;
-
-      const content = normalizeChunkContent(chunk.content);
-      if (content) {
-        assistantContent += content;
-        res.write(`data: ${JSON.stringify({ content })}\n\n`);
-      }
-    }
   } catch (err) {
-    if (!signal?.aborted) {
-      writeError(res, `LangChain 调用 DeepSeek 流出错: ${err.message}`);
-    }
+    // 具体错误帧已经在 runnable 内部写入；这里吞掉异常，避免路由层重复处理。
   }
-
-  endStream(res);
-  return assistantContent;
-}
-
-function toLangChainMessages(history) {
-  return history.map((item) =>
-    item.role === 'assistant'
-      ? new AIMessage(item.content)
-      : new HumanMessage(item.content),
-  );
 }
 
 function normalizeChunkContent(content) {

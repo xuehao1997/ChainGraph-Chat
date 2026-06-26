@@ -2,7 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import { PORT } from './config.js';
 import { streamDeepSeekToSSE } from './deepseek.js';
-import { getSessionHistory, saveSessionExchange } from './memory.js';
 
 const app = express();
 app.use(cors());
@@ -33,8 +32,6 @@ app.get('/api/chat/eventsource', async (req, res) => {
     res.status(400).json({ error: 'sessionId 不能为空' });
     return;
   }
-  const history = getSessionHistory(sessionId);
-
   prepareSSE(res);
 
   // 监听响应关闭（客户端断开）来中断上游；不能用 req，POST 读完 body 后 req 会立即 close
@@ -44,14 +41,13 @@ app.get('/api/chat/eventsource', async (req, res) => {
     if (!streamCompleted) controller.abort();
   });
 
-  const assistantContent = await streamDeepSeekToSSE({
+  await streamDeepSeekToSSE({
     message,
-    history,
+    sessionId,
     res,
     signal: controller.signal,
   });
   streamCompleted = true;
-  saveSessionExchange(sessionId, message, assistantContent);
 });
 
 /**
@@ -70,8 +66,6 @@ app.post('/api/chat/fetch', async (req, res) => {
     res.status(400).json({ error: 'sessionId 不能为空' });
     return;
   }
-  const history = getSessionHistory(sessionId);
-
   prepareSSE(res);
 
   // 监听响应关闭（客户端断开）来中断上游；不能用 req，POST 读完 body 后 req 会立即 close
@@ -81,14 +75,13 @@ app.post('/api/chat/fetch', async (req, res) => {
     if (!streamCompleted) controller.abort();
   });
 
-  const assistantContent = await streamDeepSeekToSSE({
+  await streamDeepSeekToSSE({
     message,
-    history,
+    sessionId,
     res,
     signal: controller.signal,
   });
   streamCompleted = true;
-  saveSessionExchange(sessionId, message, assistantContent);
 });
 
 app.get('/api/health', (_req, res) => {

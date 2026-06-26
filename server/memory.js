@@ -1,20 +1,41 @@
+import { BaseListChatMessageHistory } from '@langchain/core/chat_history';
+
 const MAX_STORED_MESSAGES = 50;
 const MAX_CONTEXT_MESSAGES = 10;
 
-const sessions = new Map();
+class WindowedChatMessageHistory extends BaseListChatMessageHistory {
+  lc_namespace = ['streambench', 'memory', 'windowed'];
+  messages = [];
 
-export function getSessionHistory(sessionId) {
-  return (sessions.get(sessionId) ?? []).slice(-MAX_CONTEXT_MESSAGES);
+  async getMessages() {
+    return this.messages.slice(-MAX_CONTEXT_MESSAGES);
+  }
+
+  async addMessage(message) {
+    this.messages.push(message);
+    this.trim();
+  }
+
+  async addMessages(messages) {
+    this.messages.push(...messages);
+    this.trim();
+  }
+
+  async clear() {
+    this.messages = [];
+  }
+
+  trim() {
+    this.messages = this.messages.slice(-MAX_STORED_MESSAGES);
+  }
 }
 
-export function saveSessionExchange(sessionId, userContent, assistantContent) {
-  if (!sessionId || !assistantContent.trim()) return;
+const sessions = new Map();
 
-  const history = sessions.get(sessionId) ?? [];
-  history.push(
-    { role: 'user', content: userContent },
-    { role: 'assistant', content: assistantContent },
-  );
+export function getMessageHistory(sessionId) {
+  if (!sessions.has(sessionId)) {
+    sessions.set(sessionId, new WindowedChatMessageHistory());
+  }
 
-  sessions.set(sessionId, history.slice(-MAX_STORED_MESSAGES));
+  return sessions.get(sessionId);
 }
