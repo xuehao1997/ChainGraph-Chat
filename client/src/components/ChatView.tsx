@@ -34,6 +34,9 @@ export interface ChatViewProps {
   start: (params: {
     message: string;
     sessionId: string;
+    promptMode: string;
+    userName: string;
+    language: string;
     emitIntervalMs: number;
     handlers: StreamHandlers;
   }) => StreamController;
@@ -56,6 +59,14 @@ const STATUS_TEXT: Record<StreamStatus, string> = {
   error: '出错',
 };
 
+const PROMPT_MODES = [
+  { value: 'assistant', label: '简洁助手' },
+  { value: 'code_review', label: '代码审查' },
+  { value: 'translator', label: '翻译官' },
+];
+
+const LANGUAGE_OPTIONS = ['Chinese', 'English'];
+
 function createSessionId() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
 }
@@ -71,6 +82,9 @@ export default function ChatView({
   const [status, setStatus] = useState<StreamStatus>('idle');
   const [emitIntervalMs, setEmitIntervalMs] = useState(80);
   const [sessionId, setSessionId] = useState(createSessionId);
+  const [promptMode, setPromptMode] = useState('assistant');
+  const [userName, setUserName] = useState('');
+  const [language, setLanguage] = useState('English');
 
   const controllerRef = useRef<StreamController | null>(null);
   const startTimeRef = useRef(0);
@@ -135,6 +149,9 @@ export default function ChatView({
     controllerRef.current = start({
       message,
       sessionId,
+      promptMode,
+      userName,
+      language,
       emitIntervalMs,
       handlers: {
         onOpen: () => setStatus('streaming'),
@@ -160,8 +177,11 @@ export default function ChatView({
     finishLast,
     input,
     isBusy,
+    language,
+    promptMode,
     sessionId,
     start,
+    userName,
   ]);
 
   const handleStop = useCallback(() => {
@@ -191,6 +211,49 @@ export default function ChatView({
         </div>
         <div className='chat-subtitle'>{subtitle}</div>
         <div className='chat-toolbar'>
+          <label className='toolbar-field'>
+            角色/模式
+            <select
+              value={promptMode}
+              onChange={(e) => {
+                setPromptMode(e.target.value);
+                setMessages([]);
+                setSessionId(createSessionId());
+                setStatus('idle');
+              }}
+              disabled={isBusy}
+            >
+              {PROMPT_MODES.map((mode) => (
+                <option key={mode.value} value={mode.value}>
+                  {mode.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className='toolbar-field'>
+            用户名
+            <input
+              type='text'
+              value={userName}
+              placeholder='可选'
+              onChange={(e) => setUserName(e.target.value)}
+              disabled={isBusy}
+            />
+          </label>
+          <label className='toolbar-field'>
+            目标语言
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              disabled={isBusy}
+            >
+              {LANGUAGE_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className='toolbar-field'>
             节流间隔 emitIntervalMs(ms)
             <input
@@ -290,7 +353,7 @@ export default function ChatView({
           )}
         </div>
         <div className='hint'>
-          当前会话 ID：{sessionId}，历史消息由后端内存保存
+          当前会话 ID：{sessionId}，角色模式和历史消息由后端参与 prompt 组装
         </div>
       </div>
     </div>

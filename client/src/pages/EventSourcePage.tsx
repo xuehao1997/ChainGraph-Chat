@@ -10,6 +10,9 @@ export default function EventSourcePage() {
   const start = ({
     message,
     sessionId,
+    promptMode,
+    userName,
+    language,
     emitIntervalMs,
     handlers,
   }: {
@@ -17,6 +20,15 @@ export default function EventSourcePage() {
     sessionId: Parameters<
       React.ComponentProps<typeof ChatView>['start']
     >[0]['sessionId'];
+    promptMode: Parameters<
+      React.ComponentProps<typeof ChatView>['start']
+    >[0]['promptMode'];
+    userName: Parameters<
+      React.ComponentProps<typeof ChatView>['start']
+    >[0]['userName'];
+    language: Parameters<
+      React.ComponentProps<typeof ChatView>['start']
+    >[0]['language'];
     emitIntervalMs: number;
     handlers: Parameters<
       React.ComponentProps<typeof ChatView>['start']
@@ -25,6 +37,9 @@ export default function EventSourcePage() {
     const params = new URLSearchParams({
       message,
       sessionId,
+      promptMode,
+      userName,
+      language,
     });
     const url = `/api/chat/eventsource?${params.toString()}`;
     let done = false;

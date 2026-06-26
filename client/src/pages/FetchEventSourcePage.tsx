@@ -11,6 +11,9 @@ export default function FetchEventSourcePage() {
   const start = ({
     message,
     sessionId,
+    promptMode,
+    userName,
+    language,
     emitIntervalMs,
     handlers,
   }: {
@@ -18,6 +21,15 @@ export default function FetchEventSourcePage() {
     sessionId: Parameters<
       React.ComponentProps<typeof ChatView>['start']
     >[0]['sessionId'];
+    promptMode: Parameters<
+      React.ComponentProps<typeof ChatView>['start']
+    >[0]['promptMode'];
+    userName: Parameters<
+      React.ComponentProps<typeof ChatView>['start']
+    >[0]['userName'];
+    language: Parameters<
+      React.ComponentProps<typeof ChatView>['start']
+    >[0]['language'];
     emitIntervalMs: number;
     handlers: Parameters<
       React.ComponentProps<typeof ChatView>['start']
@@ -41,7 +53,7 @@ export default function FetchEventSourcePage() {
     fetchEventSource('/api/chat/fetch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, sessionId }),
+      body: JSON.stringify({ message, sessionId, promptMode, userName, language }),
       signal: ctrl.signal,
       openWhenHidden: true, // 切到后台标签页时也保持连接
       onopen: async (res) => {

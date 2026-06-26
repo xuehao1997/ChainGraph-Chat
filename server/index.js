@@ -32,6 +32,9 @@ app.get('/api/chat/eventsource', async (req, res) => {
     res.status(400).json({ error: 'sessionId 不能为空' });
     return;
   }
+  const promptMode = normalizeText(req.query.promptMode);
+  const userName = normalizeText(req.query.userName);
+  const language = normalizeText(req.query.language);
   prepareSSE(res);
 
   // 监听响应关闭（客户端断开）来中断上游；不能用 req，POST 读完 body 后 req 会立即 close
@@ -44,6 +47,9 @@ app.get('/api/chat/eventsource', async (req, res) => {
   await streamDeepSeekToSSE({
     message,
     sessionId,
+    promptMode,
+    userName,
+    language,
     res,
     signal: controller.signal,
   });
@@ -66,6 +72,9 @@ app.post('/api/chat/fetch', async (req, res) => {
     res.status(400).json({ error: 'sessionId 不能为空' });
     return;
   }
+  const promptMode = normalizeText(req.body?.promptMode);
+  const userName = normalizeText(req.body?.userName);
+  const language = normalizeText(req.body?.language);
   prepareSSE(res);
 
   // 监听响应关闭（客户端断开）来中断上游；不能用 req，POST 读完 body 后 req 会立即 close
@@ -78,6 +87,9 @@ app.post('/api/chat/fetch', async (req, res) => {
   await streamDeepSeekToSSE({
     message,
     sessionId,
+    promptMode,
+    userName,
+    language,
     res,
     signal: controller.signal,
   });
@@ -93,5 +105,9 @@ app.listen(PORT, () => {
 });
 
 function normalizeSessionId(value) {
+  return String(value ?? '').trim();
+}
+
+function normalizeText(value) {
   return String(value ?? '').trim();
 }

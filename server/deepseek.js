@@ -1,8 +1,4 @@
 import {
-  HumanMessage,
-  SystemMessage,
-} from '@langchain/core/messages';
-import {
   RunnableLambda,
   RunnableWithMessageHistory,
 } from '@langchain/core/runnables';
@@ -13,9 +9,7 @@ import {
   DEEPSEEK_MODEL,
 } from './config.js';
 import { getMessageHistory } from './memory.js';
-
-const SYSTEM_PROMPT =
-  '你是一个简洁、友好的中文 AI 助手，用于 SSE 流式输出测试。';
+import { createChatPrompt } from './prompts.js';
 
 function createDeepSeekChatModel() {
   return new ChatOpenAI({
@@ -30,18 +24,27 @@ function createDeepSeekChatModel() {
 }
 
 const streamToSSERunnable = RunnableLambda.from(
-  async ({ message, history = [], res, signal }) => {
+  async ({
+    message,
+    history = [],
+    promptMode,
+    userName,
+    language,
+    res,
+    signal,
+  }) => {
     let assistantContent = '';
 
     try {
       const model = createDeepSeekChatModel();
-      const messages = [
-        new SystemMessage(SYSTEM_PROMPT),
-        ...history,
-        new HumanMessage(message),
-      ];
-      const stream = await model.stream(
-        messages,
+      const chain = createChatPrompt(promptMode).pipe(model);
+      const stream = await chain.stream(
+        {
+          message,
+          history,
+          user_name: userName || '',
+          language: language || 'English',
+        },
         { signal },
       );
 
@@ -92,13 +95,24 @@ const streamToSSEWithHistory = new RunnableWithMessageHistory({
  * @param {object} params
  * @param {string} params.message     用户输入
  * @param {string} params.sessionId   会话 ID，用于读写 ChatMessageHistory
+ * @param {string} params.promptMode  Prompt 角色/模式
+ * @param {string} params.userName    Prompt 变量：用户名称
+ * @param {string} params.language    Prompt 变量：目标语言
  * @param {import('express').Response} params.res  Express 响应（已设置 SSE 头）
  * @param {AbortSignal} params.signal  客户端断开时用于中断上游请求
  */
-export async function streamDeepSeekToSSE({ message, sessionId, res, signal }) {
+export async function streamDeepSeekToSSE({
+  message,
+  sessionId,
+  promptMode,
+  userName,
+  language,
+  res,
+  signal,
+}) {
   try {
     await streamToSSEWithHistory.invoke(
-      { message, res, signal },
+      { message, promptMode, userName, language, res, signal },
       { configurable: { sessionId } },
     );
   } catch (err) {
